@@ -104,10 +104,3 @@ jobs:
         shell: bash
         run: |
             sudo singularity build executables.sif docker://ghcr.io/${{ needs.deploy-docker.outputs.downcase_repo }}-executables:${{ needs.deploy-docker.outputs.tag_name }}
-      - name: Upload Singularity images to ghcr.io
-        shell: bash
-        run: |
-            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u jpfeuffer --password-stdin oras://ghcr.io
-            singularity push library.sif oras://ghcr.io/${{ needs.deploy-docker.outputs.downcase_repo }}-library-sif:${{ needs.deploy-docker.outputs.tag_name }}
-            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u jpfeuffer --password-stdin oras://ghcr.io
-            singularity push executables.sif oras://ghcr.io/${{ needs.deploy-docker.outputs.downcase_repo }}-executables-sif:${{ needs.deploy-docker.outputs.tag_name }}
