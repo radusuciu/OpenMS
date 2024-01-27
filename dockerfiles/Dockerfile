@@ -122,11 +122,21 @@ RUN git clone --depth=1 --branch=${OPENMS_BRANCH} ${OPENMS_REPO} ${OPENMS_SOURCE
 RUN cmake \
     -DCMAKE_BUILD_TYPE='Release' \
     -DCMAKE_PREFIX_PATH="${CONTRIB_BUILD_DIR}/;/usr/;/usr/local" \
+    -DWITH_GUI=OFF \
     -DBOOST_USE_STATIC=OFF \
     -S ${OPENMS_SOURCE_DIR} \
     -B ${OPENMS_LIBRARY_BUILD_DIR}
 WORKDIR ${OPENMS_LIBRARY_BUILD_DIR}
 RUN make OpenMS
+
+
+### OpenMS library build + GUI ###
+FROM library-build AS library-build-gui
+ARG OPENMS_SOURCE_DIR
+ARG OPENMS_LIBRARY_BUILD_DIR
+
+RUN cmake -DWITH_GUI=ON -S ${OPENMS_SOURCE_DIR} -B ${OPENMS_LIBRARY_BUILD_DIR}
+RUN make OpenMS_GUI
 
 
 ### OpenMS tools build ###
@@ -154,16 +164,19 @@ WORKDIR ${OPENMS_LIBRARY_BUILD_DIR}
 RUN make TOPP
 
 
-### OpenMS library ###
-FROM ubuntu:22.04 AS library
-ARG OPENMS_SOURCE_DIR
-ARG OPENMS_LIBRARY_DIR
+### OpenMS tools build with GUI ###
+FROM tools-build AS tools-build-gui
 ARG OPENMS_LIBRARY_BUILD_DIR
-ARG CONTRIB_BUILD_DIR
+
+WORKDIR ${OPENMS_LIBRARY_BUILD_DIR}
+RUN make TOPP
+
+
+### OpenMS library runtime base ###
+FROM ubuntu:22.04 AS library-runtime-base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends --no-install-suggests \
-    libqt5opengl5 \
     libsvm3 \
     libzip4 \
     zlib1g \
@@ -179,11 +192,38 @@ RUN apt-get update \
     libboost-random1.74-dev \
   && rm -rf /var/lib/apt/lists/*
 
+
+### OpenMS library runtime ###
+FROM library-runtime-base AS library
+ARG OPENMS_SOURCE_DIR
+ARG OPENMS_LIBRARY_DIR
+ARG OPENMS_LIBRARY_BUILD_DIR
+ARG CONTRIB_BUILD_DIR
+
 COPY --from=library-build ${CONTRIB_BUILD_DIR}/bin ${CONTRIB_BUILD_DIR}/bin
 COPY --from=library-build ${OPENMS_LIBRARY_DIR} ${OPENMS_LIBRARY_DIR}
 COPY --from=library-build ${OPENMS_SOURCE_DIR}/share ${OPENMS_LIBRARY_BUILD_DIR}/share
 
 LABEL software="OpenMS (library)"
+
+
+### OpenMS library + GUI ###
+FROM library-runtime-base AS library-gui
+ARG OPENMS_SOURCE_DIR
+ARG OPENMS_LIBRARY_DIR
+ARG OPENMS_LIBRARY_BUILD_DIR
+ARG CONTRIB_BUILD_DIR
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends --no-install-suggests \
+    libqt5opengl5 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=library-build-gui ${CONTRIB_BUILD_DIR}/bin ${CONTRIB_BUILD_DIR}/bin
+COPY --from=library-build-gui ${OPENMS_LIBRARY_DIR} ${OPENMS_LIBRARY_DIR}
+COPY --from=library-build-gui ${OPENMS_SOURCE_DIR}/share ${OPENMS_LIBRARY_BUILD_DIR}/share
+
+LABEL software="OpenMS (library with GUI)"
 
 
 ### OpenMS tools runtime ###
@@ -207,7 +247,6 @@ RUN apt-get update \
     #       It's possible that we could re-build it to avoid mono altogther.
     mono-devel \
   && rm -rf /var/lib/apt/lists/*
-
 COPY --from=tools-build ${OPENMS_LIBRARY_BUILD_DIR}/bin ${OPENMS_LIBRARY_BUILD_DIR}/bin
 COPY --from=tools-build ${THIRDPARTY_DIR} ${THIRDPARTY_DIR}
 
@@ -215,6 +254,37 @@ ENV PATH="${OPENMS_LIBRARY_BUILD_DIR}/bin:${THIRDPARTY_DIR}/LuciPHOr2:${THIRDPAR
 WORKDIR ${OPENMS_LIBRARY_BUILD_DIR}
 
 LABEL software="OpenMS (tools)"
+
+
+### OpenMS tools runtime ###
+FROM library-gui AS tools-gui
+ARG OPENMS_LIBRARY_DIR
+ARG OPENMS_LIBRARY_BUILD_DIR
+ARG CONTRIB_BUILD_DIR
+ARG THIRDPARTY_DIR
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-install-suggests \
+    ## thirdparty dependencies
+    # LuciPHOr2 and MSGFPlus:
+    openjdk-17-jre \
+    # ThermoRawFileParser:
+    mono-runtime \
+    # NOTE: we need mono-devel because ThermoRawFileParser needs
+    #       netstandard.dll, which is not included in mono-runtime.
+    #       See: https://github.com/mono/mono/issues/14902,
+    #            https://github.com/mono/mono/issues/17148
+    #       It's possible that we could re-build it to avoid mono altogther.
+    mono-devel \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=tools-build-gui ${OPENMS_LIBRARY_BUILD_DIR}/bin ${OPENMS_LIBRARY_BUILD_DIR}/bin
+COPY --from=tools-build-gui ${THIRDPARTY_DIR} ${THIRDPARTY_DIR}
+
+ENV PATH="${OPENMS_LIBRARY_BUILD_DIR}/bin:${THIRDPARTY_DIR}/LuciPHOr2:${THIRDPARTY_DIR}/MSGFPlus:${THIRDPARTY_DIR}/ThermoRawFileParser:${THIRDPARTY_DIR}/Comet:${THIRDPARTY_DIR}/Fido:${THIRDPARTY_DIR}/MaRaCluster:${THIRDPARTY_DIR}/Percolator:${THIRDPARTY_DIR}/SpectraST:${THIRDPARTY_DIR}/XTandem:${THIRDPARTY_DIR}/Sage:${PATH}"
+WORKDIR ${OPENMS_LIBRARY_BUILD_DIR}
+
+LABEL software="OpenMS (tools with GUI)"
 
 
 ### OpenMS test build ###
