@@ -113,7 +113,6 @@ WORKDIR ${SOURCE_DIR}
 RUN mkdir -p ${THIRDPARTY_DIR}
 RUN <<-EOF
     set -eux
-    git submodule update --depth=1 --init THIRDPARTY
 
     # copying only the binaries that are relevant to Linux
     cp -r THIRDPARTY/All/* ${THIRDPARTY_DIR}
