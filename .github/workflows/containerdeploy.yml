@@ -45,6 +45,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: true
       - name: Checkout contrib submodule repository
         run: git submodule update --init contrib
         # we only need the contrib submodule if we're on a release branch
