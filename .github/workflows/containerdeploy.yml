@@ -6,6 +6,7 @@ on:
       - nightly
     tags:
       - "Release*"
+      - "Release/*"
 
 jobs:
   deploy-docker:
@@ -72,7 +73,7 @@ jobs:
         # otherwise, we use the latest contrib image built in the OpenMS/contrib
         if: startsWith(steps.extract_branch.outputs.branch, 'release/')
       - name: Build contrib container using the correct submodule hash
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           push: true
           context: contrib
@@ -111,7 +112,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build and push tools image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           push: true # Will only build if this is not here
           file: dockerfiles/Dockerfile
